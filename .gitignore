@@ -1,0 +1,25 @@
+.env
+/vendor/
+/node_modules/
+*.sqlite
+*.sqlite-journal
+
+# Desktop Connector Builds & Binaries (>100MB blocked by GitHub)
+desktop_connector/build/
+desktop_connector/dist/
+desktop_connector/__pycache__/
+public/downloads/*.exe
+
+# Uploaded Customer Documents
+public/uploads/documents/
+!public/uploads/documents/.gitkeep
+
+# Storage & Logs
+storage/logs/*.log
+*.log
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

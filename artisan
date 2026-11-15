@@ -1,0 +1,95 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * EasyPrint SaaS - CLI & Task Runner
+ */
+
+define('EASYPRINT_ROOT', __DIR__);
+
+// Bootstrap framework
+require_once EASYPRINT_ROOT . '/app/bootstrap.php';
+
+use App\Core\Database;
+use App\Models\DigitalDocument;
+use App\Models\ShopSubscription;
+
+$command = $argv[1] ?? 'help';
+
+switch ($command) {
+    case 'migrate':
+        echo "Running EasyPrint Database Migrations...\n";
+        try {
+            $db = Database::connect();
+            $isSqlite = ($db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite');
+
+            $schemaFile = $isSqlite ? EASYPRINT_ROOT . '/database/schema_sqlite.sql' : EASYPRINT_ROOT . '/database/schema.sql';
+            $schema = file_get_contents($schemaFile);
+            foreach (explode(';', $schema) as $stmt) {
+                $stmt = trim($stmt);
+                if (!empty($stmt)) {
+                    $db->exec($stmt);
+                }
+            }
+            echo " Schema migrated successfully.\n";
+
+            if (isset($argv[2]) && $argv[2] === '--seed') {
+                $seedersFile = $isSqlite ? EASYPRINT_ROOT . '/database/seeders_sqlite.sql' : EASYPRINT_ROOT . '/database/seeders.sql';
+                $seeders = file_get_contents($seedersFile);
+                foreach (explode(';', $seeders) as $stmt) {
+                    $stmt = trim($stmt);
+                    if (!empty($stmt)) {
+                        $db->exec($stmt);
+                    }
+                }
+                echo " Default seeders executed successfully.\n";
+            }
+        } catch (\Throwable $e) {
+            echo "Migration failed: " . $e->getMessage() . "\n";
+            exit(1);
+        }
+        break;
+
+    case 'EasyPrint:cleanup-documents':
+        echo "[" . date('Y-m-d H:i:s') . "] Starting 24-hr GDPR Document Cleanup...\n";
+        try {
+            $deleted = DigitalDocument::cleanupExpired();
+            echo " Successfully purged {$deleted} expired customer document(s) from disk.\n";
+        } catch (\Throwable $e) {
+            echo "Cleanup failed: " . $e->getMessage() . "\n";
+            exit(1);
+        }
+        break;
+
+    case 'EasyPrint:check-subscriptions':
+        echo "[" . date('Y-m-d H:i:s') . "] Checking Merchant Subscriptions...\n";
+        try {
+            $expiredCount = ShopSubscription::expireOutdated();
+            echo " Updated {$expiredCount} expired merchant subscription(s) to EXPIRED status.\n";
+        } catch (\Throwable $e) {
+            echo "Subscription check failed: " . $e->getMessage() . "\n";
+            exit(1);
+        }
+        break;
+
+    case 'serve':
+        $host = '127.0.0.1';
+        $port = 8000;
+        echo "Starting EasyPrint development server on http://{$host}:{$port}\n";
+        echo "Press Ctrl+C to stop.\n";
+        passthru("php -S {$host}:{$port} -t public");
+        break;
+
+    case 'help':
+    default:
+        echo "\nEasyPrint SaaS Automation CLI Tools\n";
+        echo "-------------------------------------\n";
+        echo "Usage: php artisan <command> [options]\n\n";
+        echo "Available Commands:\n";
+        echo "  migrate [--seed]                  Execute MySQL 8.0 schema & seeders\n";
+        echo "  EasyPrint:cleanup-documents       (Cron Hourly) Purge customer files > 24 hours\n";
+        echo "  EasyPrint:check-subscriptions     (Cron Daily) Mark expired plans & notify\n";
+        echo "  serve                             Launch local PHP development server\n\n";
+        break;
+}
+
